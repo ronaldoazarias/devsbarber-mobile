@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components/native';
 import { useNavigation } from '@react-navigation/native';
 
+import Api from '../Api';
+
 import ExpandIcon from '../assets/expand.svg';
 import NavPrevIcon from '../assets/nav_prev.svg';
 import NavNextIcon from '../assets/nav_next.svg';
@@ -117,6 +119,7 @@ const DateList = styled.ScrollView`
 const DateItem = styled.TouchableOpacity`
     width: 45px;
     justify-content: center;
+    align-items: center;
     border-radius: 10px;
     padding-top: 5px;
     padding-bottom: 5px;
@@ -130,6 +133,20 @@ const DateItemWeekDay = styled.Text`
 const DateItemNumber = styled.Text`
     font-size: 16px;
     font-weight: bold;
+`;
+
+const TimeList = styled.ScrollView``;
+
+const TimeItem = styled.TouchableOpacity`
+    width: 75px;
+    height: 40px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 10px;    
+`;
+
+const TimeItemText = styled.Text`
+    font-size: 16px;
 `;
 
 const months = [
@@ -161,8 +178,8 @@ export default ({ show, setShowModal, user, service }) => {
     const navigation = useNavigation();
 
     const [ selectedYear, setSelectedYear ] = useState(0);
-    const [ selectedMonth, setSelectedMonth ] = useState(0);
-    const [ selectedDay, setSelectedDay ] = useState(0);
+    const [ selectedMonth, setSelectedMonth ] = useState(-1);
+    const [ selectedDay, setSelectedDay ] = useState(-1);
     const [ selectedHour, setSelectedHour ] = useState(null);
     const [ listDays, setListDays ] = useState([]);
     const [ listHours, setListHours ] = useState([]);
@@ -193,11 +210,32 @@ export default ({ show, setShowModal, user, service }) => {
         }
 
         setListDays(newListDays);
-        setSelectedDay(1);
+        setSelectedDay(0);
         setListHours([]);
         setSelectedHour(0);
 
-    }, [selectedMonth, selectedYear]);
+    }, [user, selectedMonth, selectedYear]);
+
+    useEffect(()=>{
+        if(user.available && selectedDay > 0) {
+            let d = new Date(selectedYear, selectedMonth, selectedDay);
+            let year = d.getFullYear();
+            let month = d.getMonth() + 1;
+            let day = d.getDate();
+            month = month < 10 ? '0'+month : month;
+            day = day < 10 ? '0'+day : day;
+            let selDate = `${year}-${month}-${day}`;
+
+            let availability = user.available.filter(e=>e.date===selDate);
+
+            if(availability.length > 0) {
+                setListHours( availability[0].hours );
+            }
+
+            setSelectedHour(null);
+        }
+
+    }, [user, selectedDay]);
 
     useEffect(()=>{
         let today = new Date();
@@ -211,7 +249,7 @@ export default ({ show, setShowModal, user, service }) => {
         mountDate.setMonth( mountDate.getMonth() - 1 );
         setSelectedYear(mountDate.getFullYear());
         setSelectedMonth(mountDate.getMonth());
-        setSelectedDay(1);
+        setSelectedDay(-1);
     }
 
     const handleRightDateClick = () => {
@@ -219,15 +257,44 @@ export default ({ show, setShowModal, user, service }) => {
         mountDate.setMonth( mountDate.getMonth() + 1 );
         setSelectedYear(mountDate.getFullYear());
         setSelectedMonth(mountDate.getMonth());
-        setSelectedDay(1);        
+        setSelectedDay(-1);        
     }    
 
     const handleCloseButton = () => {
         setShowModal(false);
     }
 
-    const handleFinishClick = () => {
+    const handleFinishClick = async () => {
+        console.log('user: '+user.id+', service: '+service+', year: '+selectedYear+', month: '+selectedMonth);
+        console.log('day: '+selectedDay+', hour: '+selectedHour);
 
+        if(
+                user.id &&
+                service != null &
+                selectedYear > 0 &&
+                selectedMonth > -1 &&
+                selectedDay > -1 &&
+                selectedHour != null
+        ) {
+            let res = await Api.setAppointment (
+                user.id,
+                user.services[service].id,
+                selectedYear,
+                selectedMonth+1,
+                selectedDay,
+                selectedHour
+            );
+
+            if(res.error == '') {
+                setShowModal(false);
+                navigation.navigate('Appointments');
+            } else {
+                alert(res.error);
+            }
+
+        } else {
+            alert("Preencha todos os dados");
+        }
     }
 
     return (
@@ -277,14 +344,49 @@ export default ({ show, setShowModal, user, service }) => {
                             {listDays.map((item, key)=>(
                                 <DateItem 
                                     key={key}
-                                    onPress={()=>{}}
+                                    onPress={()=>item.status ? setSelectedDay(item.number): null}
+                                    style={{
+                                        opacity: item.status ? 1 : 0.5,
+                                        backgroundColor: item.number === selectedDay? '#4EADBE' : '#FFF'
+                                    }}
                                 >
-                                    <DateItemWeekDay>{item.weekday}</DateItemWeekDay>
-                                    <DateItemNumber>{item.number}</DateItemNumber>
+                                    <DateItemWeekDay
+                                        style={{
+                                            color: item.number === selectedDay? '#FFF' : '#000'
+                                        }}
+                                    >{item.weekday}</DateItemWeekDay>
+                                    <DateItemNumber
+                                        style={{
+                                            color: item.number === selectedDay? '#FFF' : '#000'
+                                        }}
+                                    >{item.number}</DateItemNumber>
                                 </DateItem>
                             ))}
                         </DateList>
                     </ModalItem>
+
+                    {selectedDay > 0 && listHours.length > 0 &&
+                        <ModalItem>
+                            <TimeList horizontal={true} showsHorizontalScrollIndicator={false}>
+                                {listHours.map((item, key)=>(
+                                    <TimeItem
+                                        key={key}
+                                        onPress={()=>{setSelectedHour(item)}}
+                                        style={{
+                                            backgroundColor: item === selectedHour ? '#4EADBE' : '#FFF'
+                                        }}
+                                    >
+                                        <TimeItemText
+                                            style={{
+                                                color: item === selectedHour ? '#FFF' : '#000',
+                                                fontWeight:  item === selectedHour ? 'bold' : 'normal',
+                                            }}
+                                        >{item}</TimeItemText>
+                                    </TimeItem>
+                                ))}
+                            </TimeList>
+                        </ModalItem>
+                    }
 
                     <FinishButton onPress={handleFinishClick}>
                         <FinishButtonText>
